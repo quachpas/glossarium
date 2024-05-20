@@ -24,6 +24,7 @@
 #let __glossarium_error_prefix = "glossarium@" + glossarium_version + " error : "
 
 // Errors types
+#let __has_neither_short_nor_long = "has_neither_short_nor_long"
 #let __key_not_found = "key_not_found"
 #let __attribute_is_empty = "attribute_is_empty"
 #let __unknown_error = "unknown_error"
@@ -48,6 +49,8 @@
   } else if kind == __attribute_is_empty {
     attr = kwargs.get("attr") + " "
     msg = "requested attribute " + attr + "is empty for key '" + key + "'"
+  } else if kind == __has_neither_short_nor_long {
+    msg = "entry " + key + "has neither short or long"
   } else {
     msg = "unknown error"
   }
@@ -117,6 +120,7 @@
   let attr = entry.at(key, default: "")
   return attr != "" and attr != []
 }
+#let has-short(entry) = __has_attribute(entry, "short")
 #let has-long(entry) = __has_attribute(entry, "long")
 #let has-artshort(entry) = __has_attribute(entry, "artshort")
 #let has-plural(entry) = __has_attribute(entry, "plural")
@@ -163,6 +167,7 @@
       
     // Conditions
     let is-first-or-long = __is_first_or_long(here(), key, long: long)
+    let has-short = has-short(entry)
     let has-long = has-long(entry)
 
     // Link text
@@ -183,10 +188,12 @@
     let link-text = []
     if display != none {
       link-text += [#display]
-    } else if is-first-or-long and has-long and long != false {
+    } else if is-first-or-long and has-long and has-short and long != false {
       link-text += [#ent-long (#ent-short#suffix)]
-    } else {
+    } else if has-short {
       link-text += [#ent-short#suffix]
+    } else {
+      link-text += [#ent-long#suffix]
     }
      
     return __link_and_label(entry.key, link-text)
@@ -215,16 +222,19 @@
 
     // Conditions
     let is-first-or-long = __is_first_or_long(here(), key, long: long)
+    let has-short = has-short(entry)
     let has-long = has-long(entry)
 
     // Link text
     let link-text = none
     let article = none
-    if is-first-or-long and has-long and long != false {
+    if is-first-or-long and has-long and has-short and long != false {
       link-text = [#ent-long (#ent-short#suffix)]
       article = ent-artlong
-    } else { // Default to short
-      link-text = [#entry.short#suffix]
+    } else if has-short { // Default to short
+      link-text += [#ent-short#suffix]
+    } else {
+      link-text = [#entry.long#suffix]
       article = ent-artshort
     }
      
@@ -255,6 +265,7 @@
      
     // Conditions
     let is-first-or-long = __is_first_or_long(here(), key, long: long)
+    let has-short = has-short(entry)
     let has-plural = has-plural(entry) 
     let has-long = has-long(entry)
     let has-longplural = has-longplural(entry)
@@ -268,7 +279,7 @@
       [#ent-longplural]
     }
      
-    let shortplural = if not has-plural {
+    let shortplural = if not has-plural and has-short {
       // Default short plural
       // if the entry plural is not provided, then fallback to adding default
       // default-plural-suffix
@@ -278,10 +289,12 @@
     }
      
     // Link text
-    let link-text = if is-first-or-long and has-long and long != false {
+    let link-text = if is-first-or-long and has-long and has-short and long != false {
       [#longplural (#shortplural)]
-    } else {
+    } else if has-short { // Default to short
       [#shortplural]
+    } else {
+      [#longplural]
     }
      
     return __link_and_label(entry.key, link-text)
@@ -450,9 +463,15 @@
 #let __normalize_entry_list(entry-list) = {
   let new-list = ()
   for entry in entry-list {
+    if entry == () {
+      continue
+    }
+    if not has-long(entry) and not has-short(entry) {
+      panic(__error_message(entry.key, __has_neither_short_nor_long))   
+    }
     new-list.push((
       key: entry.key,
-      short: entry.short,
+      short: entry.at("short", default: ""),
       artshort: entry.at("artshort", default: "a"),
       plural: entry.at("plural", default: ""),
       long: entry.at("long", default: ""),
@@ -550,11 +569,14 @@
   let caption = []
   let txt = text.with(weight: 600)
   
-  if has-long(entry) {
+  if has-long(entry) and has-short(entry) {
     caption += txt(emph(entry.short) + [ -- ] + entry.long)
+  } else if has-long(entry) {
+    caption += txt(emph(entry.long))
   } else {
     caption += txt(emph(entry.short))
   }
+
   return caption
 } 
 
